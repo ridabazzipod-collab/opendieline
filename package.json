@@ -20,11 +20,11 @@
     "dev:web": "node scripts/build-web.mjs && npx --yes serve dist-web"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
-    "typescript": "~5.9.3",
+    "typescript": "~7.0.2",
     "vitest": "^5.1.0"
   }
 }
