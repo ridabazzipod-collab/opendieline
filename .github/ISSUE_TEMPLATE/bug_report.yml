@@ -1,0 +1,25 @@
+name: Bug report
+description: Something is wrong in a dieline, export or the playground.
+labels: [bug]
+body:
+  - type: input
+    id: template
+    attributes:
+      label: Box style
+      placeholder: reverse-tuck-end
+    validations:
+      required: true
+  - type: input
+    id: size
+    attributes:
+      label: Length, width, depth and thickness in mm
+      placeholder: 80, 40, 120, 0.5
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What went wrong?
+      description: Tell us what you expected. Include your software or cutter if an export failed.
+    validations:
+      required: true

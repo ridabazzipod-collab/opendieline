@@ -1,0 +1,30 @@
+{
+  "name": "opendieline",
+  "version": "0.1.0",
+  "description": "Parametric packaging dieline engine: generates print-ready box templates and proves they fold closed.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "keywords": ["packaging", "dieline", "die-cut", "box", "svg", "pdf", "dxf", "cad", "print"],
+  "engines": { "node": ">=20" },
+  "bin": { "opendieline": "./dist/cli.js" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/build-web.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "examples": "tsx scripts/generate-examples.ts",
+    "dev:web": "node scripts/build-web.mjs && npx --yes serve dist-web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.0"
+  }
+}

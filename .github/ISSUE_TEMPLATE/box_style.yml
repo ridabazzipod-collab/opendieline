@@ -1,0 +1,18 @@
+name: Request a box style
+description: Ask for a new packaging structure.
+labels: [box-style]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Box style name
+      description: Include a FEFCO or ECMA code if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Where is it used?
+      description: A photo, diagram or link helps.
+    validations:
+      required: true

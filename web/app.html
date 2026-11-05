@@ -1,0 +1,172 @@
+<title>OpenDieline Playground</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;600;700&family=Sometype+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a workbench. Settings sit beside a self-healing cutting mat that holds the flat blank and the folded box. */
+:root {
+  --paper: #eef0ec;
+  --surface: #ffffff;
+  --ink: #17231f;
+  --muted: #58665f;
+  --line: #cdd5cf;
+  --mat: #14473e;
+  --mat-line: #2b6155;
+  --mat-ink: #d7e8e1;
+  --cut: #c8006d;
+  --crease: #0079b3;
+  --pass: #0d7a4f;
+  --fail: #b3261e;
+  --display: "Familjen Grotesk", "Segoe UI", sans-serif;
+  --mono: "Sometype Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #101715; --surface: #18211e; --ink: #e8eeea; --muted: #9dada5; --line: #2f3d38;
+    --mat: #0e3a32; --mat-line: #215248; --mat-ink: #d7e8e1;
+    --cut: #ff5cac; --crease: #5cc2f2; --pass: #4fd19b; --fail: #ff8a80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #101715; --surface: #18211e; --ink: #e8eeea; --muted: #9dada5; --line: #2f3d38;
+  --mat: #0e3a32; --mat-line: #215248; --mat-ink: #d7e8e1;
+  --cut: #ff5cac; --crease: #5cc2f2; --pass: #4fd19b; --fail: #ff8a80; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: 400 15px/1.5 var(--display);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+.shell { max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; }
+h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+h1 span { color: var(--cut); }
+header p { margin: 0; color: var(--muted); max-width: 62ch; }
+.bench { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+label, .label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.field { display: grid; gap: 4px; min-width: 0; }
+select, input[type="number"] {
+  width: 100%; font: 400 15px/1.3 var(--mono); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 4px; padding: 8px;
+}
+select { font-family: var(--display); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#description { margin: 0; font-size: 14px; color: var(--muted); }
+:focus-visible { outline: 2px solid var(--crease); outline-offset: 2px; }
+.mat {
+  --grid: 28px;
+  background-color: var(--mat);
+  background-image:
+    linear-gradient(var(--mat-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mat-line) 1px, transparent 1px);
+  background-size: var(--grid) var(--grid);
+  border-radius: 6px; color: var(--mat-ink); overflow: hidden; min-width: 0;
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.pane { position: relative; min-width: 0; height: 500px; padding: 34px 14px 14px; }
+.pane + .pane { border-left: 1px solid var(--mat-line); }
+.tag { position: absolute; top: 10px; left: 14px; font: 400 12px/1 var(--mono); letter-spacing: 0.02em; }
+#flat { width: 100%; height: 100%; display: grid; place-items: center; }
+#flat svg { width: 100%; height: 100%; display: block; }
+#view { width: 100%; height: calc(100% - 44px); display: block; touch-action: none; cursor: grab; }
+#view:active { cursor: grabbing; }
+.foldbar { display: flex; align-items: center; gap: 10px; height: 44px; }
+.foldbar input { flex: 1; min-width: 0; accent-color: #f3a6cd; }
+.foldbar output { font: 400 12px/1 var(--mono); width: 4ch; text-align: right; }
+.foldbar button { background: var(--mat-ink); color: #0e3a32; border-color: var(--mat-ink); }
+button {
+  font: 600 14px/1 var(--display); color: var(--ink); background: transparent;
+  border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--ink); }
+.exports { display: flex; flex-wrap: wrap; gap: 8px; }
+.exports button { flex: 1 1 auto; font-family: var(--mono); }
+#note { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.4em; }
+.readout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ul.checks li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; font-size: 14px; }
+.pill { font: 600 11px/1.7 var(--mono); text-align: center; border-radius: 3px; color: var(--surface); align-self: start; }
+.pass .pill { background: var(--pass); }
+.fail .pill { background: var(--fail); }
+dl { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 16px; }
+dl div { min-width: 0; }
+dt { font-size: 12px; color: var(--muted); }
+dd { margin: 0; font: 400 16px/1.3 var(--mono); font-variant-numeric: tabular-nums; }
+#error { margin: 0; color: var(--fail); font-weight: 600; }
+footer { color: var(--muted); font-size: 13px; }
+@media (max-width: 980px) {
+  .bench, .readout { grid-template-columns: minmax(0, 1fr); }
+  .bench .mat { order: -1; }
+}
+@media (max-width: 640px) {
+  .mat { grid-template-columns: minmax(0, 1fr); }
+  .pane { height: 340px; }
+  .pane + .pane { border-left: 0; border-top: 1px solid var(--mat-line); }
+}
+</style>
+
+<div class="shell">
+  <header>
+    <h1>Open<span>Dieline</span></h1>
+    <p>Set a box size and get a dieline that has been folded in 3D to prove it closes.</p>
+  </header>
+  <main class="bench">
+    <form class="panel" id="controls">
+      <div class="field">
+        <label for="template">Box style</label>
+        <select id="template"></select>
+      </div>
+      <p id="description"></p>
+      <div class="grid2">
+        <div class="field"><label for="length">Length mm</label><input id="length" type="number" min="1" step="1" inputmode="decimal"></div>
+        <div class="field"><label for="width">Width mm</label><input id="width" type="number" min="1" step="1" inputmode="decimal"></div>
+        <div class="field"><label for="depth">Depth mm</label><input id="depth" type="number" min="1" step="1" inputmode="decimal"></div>
+        <div class="field"><label for="thickness">Board mm</label><input id="thickness" type="number" min="0" step="0.1" inputmode="decimal"></div>
+        <div class="field"><label for="bleed">Bleed mm</label><input id="bleed" type="number" min="0" step="0.5" inputmode="decimal"></div>
+        <div class="field"><label for="gsm">Board g/m²</label><input id="gsm" type="number" min="0" step="10" inputmode="decimal"></div>
+      </div>
+      <div class="field">
+        <span class="label">Export at full scale</span>
+        <div class="exports">
+          <button type="button" data-format="svg">SVG</button>
+          <button type="button" data-format="pdf">PDF</button>
+          <button type="button" data-format="dxf" id="dxf">DXF</button>
+        </div>
+        <p id="note" role="status"></p>
+      </div>
+    </form>
+    <section class="mat" aria-label="Dieline preview">
+      <div class="pane">
+        <span class="tag">FLAT BLANK · cut solid, crease dashed</span>
+        <div id="flat"></div>
+      </div>
+      <div class="pane">
+        <span class="tag">FOLDED · drag to turn</span>
+        <canvas id="view" aria-label="3D view of the box folding"></canvas>
+        <div class="foldbar">
+          <button type="button" id="play">Fold</button>
+          <input id="fold" type="range" min="0" max="100" value="72" aria-label="Fold amount">
+          <output id="foldValue" for="fold">72%</output>
+        </div>
+      </div>
+    </section>
+  </main>
+  <section class="panel readout" aria-label="Results">
+    <div class="field">
+      <span class="label">Fold verification</span>
+      <p id="error" hidden></p>
+      <ul class="checks" id="checks"></ul>
+    </div>
+    <div class="field">
+      <span class="label">Blank</span>
+      <dl id="metrics"></dl>
+    </div>
+  </section>
+  <footer>All sizes are in millimetres. Test a sample before a production run.</footer>
+</div>
+<script>/*__BUNDLE__*/</script>
