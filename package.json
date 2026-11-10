@@ -1,6 +1,6 @@
 {
   "name": "opendieline",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Parametric packaging dieline engine: print-ready box and pouch templates, fold checks and mockups.",
   "type": "module",
   "license": "Apache-2.0",

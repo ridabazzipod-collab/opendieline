@@ -43,12 +43,14 @@ let animation = 0;
 let downloads: Downloads | null = null;
 
 interface Upload {
-  source: HTMLImageElement;
+  source: CanvasImageSource;
   width: number;
   height: number;
   name: string;
-  url: string;
+  /** Changes with every upload, so cached mockup art is rebuilt. */
+  id: number;
 }
+let uploads = 0;
 const studio = {
   mode: "full" as "full" | "front",
   upload: null as Upload | null,
@@ -369,7 +371,7 @@ function art(): Art {
     JSON.stringify(dieline.bounds),
     bleed(),
     studio.mode,
-    upload?.url ?? "",
+    upload?.id ?? "",
     input("fill").value,
     studio.turns,
   ].join("|");
@@ -450,26 +452,58 @@ async function loadDesign(file: File): Promise<void> {
     status.textContent = "That file is larger than 60 MB. Export a smaller image.";
     return;
   }
-  const url = URL.createObjectURL(file);
-  const image = new Image();
-  image.src = url;
-  try {
-    await image.decode();
-  } catch {
-    URL.revokeObjectURL(url);
-    status.textContent = "That image could not be opened. Try exporting it again as PNG.";
+  status.classList.remove("warn");
+  status.textContent = `Opening ${file.name}…`;
+  const image = await openImage(file);
+  if (!image) {
+    status.classList.add("warn");
+    status.textContent =
+      file.type === "image/svg+xml"
+        ? "That SVG could not be opened. Export it as PNG, or give the SVG a width and height."
+        : "That image could not be opened. Try exporting it again as PNG.";
     return;
   }
-  if (!image.naturalWidth || !image.naturalHeight) {
-    URL.revokeObjectURL(url);
-    status.textContent = "That SVG has no size. Export it as PNG, or give the SVG a width and height.";
-    return;
-  }
-  if (studio.upload) URL.revokeObjectURL(studio.upload.url);
-  studio.upload = { source: image, width: image.naturalWidth, height: image.naturalHeight, name: file.name, url };
+  studio.upload = { ...image, name: file.name, id: ++uploads };
   artCache = null;
   draw();
   renderMockup();
+}
+
+type Opened = { source: CanvasImageSource; width: number; height: number };
+
+/**
+ * Some pages, such as file previews, block blob: or data: image URLs. So this tries
+ * several ways to read the file, starting with one that needs no URL at all.
+ */
+async function openImage(file: File): Promise<Opened | null> {
+  if (file.type !== "image/svg+xml" && typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file);
+      if (bitmap.width && bitmap.height) return { source: bitmap, width: bitmap.width, height: bitmap.height };
+    } catch {
+      // Fall through to the next way.
+    }
+  }
+  const tryUrl = (url: string): Promise<Opened | null> =>
+    new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () =>
+        resolve(image.naturalWidth && image.naturalHeight ? { source: image, width: image.naturalWidth, height: image.naturalHeight } : null);
+      image.onerror = () => resolve(null);
+      image.src = url;
+    });
+  const blobUrl = URL.createObjectURL(file);
+  const fromBlob = await tryUrl(blobUrl);
+  // The image keeps its pixels after loading, so the URL can go.
+  URL.revokeObjectURL(blobUrl);
+  if (fromBlob) return fromBlob;
+  const dataUrl = await new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+  return dataUrl ? tryUrl(dataUrl) : null;
 }
 
 async function saveMockup(): Promise<void> {
@@ -620,7 +654,16 @@ void document.fonts?.ready.then(() => {
 });
 
 // Inside Claude, saves go through the viewer. That route has no DXF type, so DXF is only offered on the open web.
-window.claude?.use("downloads").then((namespace) => {
-  downloads = namespace;
-  if (namespace) el("dxf").hidden = true;
-});
+// Inside a Claude page this offers a save dialog. Elsewhere, such as a file preview,
+// `use` may be missing, and plain browser downloads are used instead.
+if (typeof window.claude?.use === "function") {
+  window.claude
+    .use("downloads")
+    .then((namespace) => {
+      downloads = namespace;
+      if (namespace) el("dxf").hidden = true;
+    })
+    .catch(() => {
+      downloads = null;
+    });
+}

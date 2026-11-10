@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed designs that would not open in previews that block image links.
+- Fixed a page error in previews without the Claude save dialog.
+
 ## 0.2.0
 
 - Added flat zip pouch and stand-up zip pouch templates, with seals, zipper, tear notches,
