@@ -1,9 +1,14 @@
 import { rect } from "../geometry.js";
 import { DielineError, type PanelSpec } from "../model.js";
-import { resolveDimensions, sideFlap, type Template } from "./common.js";
+import { resolveDimensions, sideFlap, type Template, CARTON_LABELS } from "./common.js";
 
 export const regularSlottedCarton: Template = {
   id: "regular-slotted-carton",
+  kind: "carton",
+  labels: CARTON_LABELS,
+  upright: "y",
+  frontPanel: "front",
+  frontRotation: 0,
   name: "Regular slotted carton",
   description: "Standard corrugated shipper (FEFCO 0201 style) with flaps that meet in the middle.",
   defaults: { length: 300, width: 200, depth: 200, thickness: 3 },

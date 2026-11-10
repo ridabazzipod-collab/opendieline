@@ -16,6 +16,10 @@ export function pathData(points: readonly Vec2[]): string {
   return `M${points.map(([x, y]) => `${number(x)} ${number(y)}`).join("L")}Z`;
 }
 
+function openPathData(points: readonly Vec2[]): string {
+  return `M${points.map(([x, y]) => `${number(x)} ${number(y)}`).join("L")}`;
+}
+
 function escapeXml(text: string): string {
   return text
     .replaceAll("&", "&amp;")
@@ -33,6 +37,12 @@ export function toSvg(dieline: Dieline, options: SvgOptions = {}): string {
   const w = width + 2 * pad;
   const h = height + 2 * pad;
   const outline = pathData(dieline.cut);
+  const holes = dieline.innerCuts.map(pathData).join("");
+
+  const longest = Math.max(width, height);
+  const fontSize = Math.max(3, longest * 0.014);
+  const lineWidth = number(Math.max(0.35, longest * 0.001));
+  const dash = `${number(Math.max(3, longest * 0.008))} ${number(Math.max(2, longest * 0.005))}`;
 
   const creases = dieline.creases
     .map(
@@ -40,11 +50,15 @@ export function toSvg(dieline: Dieline, options: SvgOptions = {}): string {
         `<line x1="${number(from[0])}" y1="${number(from[1])}" x2="${number(to[0])}" y2="${number(to[1])}"/>`,
     )
     .join("");
+  const seals = dieline.guides
+    .filter((guide) => guide.kind === "seal")
+    .map((guide) => `<path d="${pathData(guide.points)}"/>`)
+    .join("");
+  const zippers = dieline.guides
+    .filter((guide) => guide.kind === "zipper")
+    .map((guide) => `<path d="${guide.closed ? pathData(guide.points) : openPathData(guide.points)}"/>`)
+    .join("");
 
-  const longest = Math.max(width, height);
-  const fontSize = Math.max(3, longest * 0.014);
-  const lineWidth = number(Math.max(0.35, longest * 0.001));
-  const dash = `${number(Math.max(3, longest * 0.008))} ${number(Math.max(2, longest * 0.005))}`;
   const labels =
     (options.labels ?? true)
       ? dieline.panels
@@ -60,12 +74,19 @@ export function toSvg(dieline: Dieline, options: SvgOptions = {}): string {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${number(w)}mm" height="${number(h)}mm"`,
     ` viewBox="${number(minX - pad)} ${number(minY - pad)} ${number(w)} ${number(h)}">`,
     `<title>${escapeXml(dieline.template)} dieline</title>`,
+    seals ? `<defs><clipPath id="od-blank"><path d="${outline}"/></clipPath></defs>` : "",
     bleed > 0
       ? `<g id="bleed"><path d="${outline}" fill="#d8f0e3" stroke="#d8f0e3" stroke-width="${number(bleed * 2)}" stroke-linejoin="round"/></g>`
       : "",
-    `<g id="board"><path d="${outline}" fill="#ffffff"/></g>`,
+    `<g id="board"><path d="${outline}${holes}" fill="#ffffff" fill-rule="evenodd"/></g>`,
+    seals
+      ? `<g id="seal" clip-path="url(#od-blank)" fill="#7d8b99" fill-opacity="0.2" stroke="none">${seals}</g>`
+      : "",
     `<g id="crease" stroke="#0091d5" stroke-width="${lineWidth}" stroke-dasharray="${dash}" fill="none">${creases}</g>`,
-    `<g id="cut"><path d="${outline}" fill="none" stroke="#e6007e" stroke-width="${lineWidth}" stroke-linejoin="round"/></g>`,
+    zippers
+      ? `<g id="zipper" stroke="#12945a" stroke-width="${number(Number(lineWidth) * 2)}" stroke-dasharray="${dash}" fill="none">${zippers}</g>`
+      : "",
+    `<g id="cut"><path d="${outline}${holes}" fill="none" stroke="#e6007e" stroke-width="${lineWidth}" stroke-linejoin="round"/></g>`,
     labels
       ? `<g id="labels" fill="#68707c" font-family="Helvetica,Arial,sans-serif" font-size="${number(fontSize)}" text-anchor="middle" dominant-baseline="middle">${labels}</g>`
       : "",

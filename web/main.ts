@@ -8,11 +8,14 @@ import {
   toDxf,
   toPdf,
   toSvg,
+  type BoxParameters,
   type Dieline,
+  type Template,
 } from "../src/index.js";
+import { fitUpload, frontArt, renderBox, renderPouch, sampleArt, type Art } from "./mockup.js";
 
 interface Downloads {
-  save(request: { filename: string; data: string | Uint8Array }): Promise<{ status: string }>;
+  save(request: { filename: string; data: string | Blob | Uint8Array }): Promise<{ status: string }>;
 }
 declare global {
   interface Window {
@@ -21,41 +24,112 @@ declare global {
 }
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
-const numberInput = (id: string): number => el<HTMLInputElement>(id).valueAsNumber;
+const input = (id: string): HTMLInputElement => el<HTMLInputElement>(id);
+const numberInput = (id: string): number => input(id).valueAsNumber;
 
 const select = el<HTMLSelectElement>("template");
 const canvas = el<HTMLCanvasElement>("view");
 const context = canvas.getContext("2d")!;
-const foldInput = el<HTMLInputElement>("fold");
-const note = el("note");
+const foldInput = input("fold");
+const stage = el("stage");
+const mockCanvas = el<HTMLCanvasElement>("mockup");
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+let template: Template = templates[0]!;
 let current: Dieline | null = null;
 let yaw = -0.7;
 let pitch = 0.55;
 let animation = 0;
 let downloads: Downloads | null = null;
 
-for (const template of templates) select.add(new Option(template.name, template.id));
+interface Upload {
+  source: HTMLImageElement;
+  width: number;
+  height: number;
+  name: string;
+  url: string;
+}
+const studio = {
+  mode: "full" as "full" | "front",
+  upload: null as Upload | null,
+  turns: 0,
+  background: "clear" as "clear" | "white",
+  side: "front" as "front" | "back",
+  yaw: -0.62,
+  pitch: 0.42,
+};
+let artCache: { key: string; art: Art } | null = null;
+
+for (const option of templates) select.add(new Option(option.name, option.id));
 
 function fillDefaults(): void {
-  const template = getTemplate(select.value);
-  for (const key of ["length", "width", "depth", "thickness"] as const) {
-    el<HTMLInputElement>(key).value = String(template.defaults[key]);
+  template = getTemplate(select.value);
+  const { defaults, labels } = template;
+  for (const key of ["length", "width", "depth", "thickness"] as const) input(key).value = String(defaults[key]);
+  el("lengthLabel").textContent = `${labels.length} mm`;
+  el("depthLabel").textContent = `${labels.depth} mm`;
+  el("widthLabel").textContent = `${labels.width ?? "Width"} mm`;
+  el("widthField").hidden = labels.width === null;
+
+  const pouch = template.kind === "pouch";
+  el("pouchFields").hidden = !pouch;
+  el("thicknessField").hidden = pouch;
+  if (pouch) {
+    input("seal").value = String(defaults.seal ?? 8);
+    input("zipper").value = String(defaults.zipper ?? 30);
+    input("corner").value = String(defaults.corner ?? 0);
+    input("hangHole").checked = defaults.hangHole ?? false;
+    input("gsm").value = "90";
+  } else if (input("gsm").value === "90") {
+    input("gsm").value = "350";
   }
+  el("gsmLabel").textContent = pouch ? "Film g/m²" : "Board g/m²";
   el("description").textContent = template.description;
+  el("flatTag").textContent = pouch
+    ? "FLAT LAYOUT · cut solid, fold dashed, seals grey, zipper green"
+    : "FLAT BLANK · cut solid, crease dashed";
+  el("viewTag").textContent = pouch ? "FILLED POUCH" : "FOLDED · drag to turn";
+  el("foldbar").hidden = pouch;
+  canvas.classList.toggle("full", pouch);
+  el("checksTitle").textContent = pouch ? "Pouch checks" : "Fold verification";
+
+  el("insideField").hidden = pouch;
+  el("sideField").hidden = !pouch;
+  el("stageTip").hidden = pouch;
+  mockCanvas.classList.toggle("turnable", !pouch);
+  studio.turns = 0;
+  studio.side = "front";
+  syncStudio();
+}
+
+function parameters(): BoxParameters {
+  const base: BoxParameters = {
+    length: numberInput("length"),
+    width: template.labels.width === null ? template.defaults.width : numberInput("width"),
+    depth: numberInput("depth"),
+    thickness: template.kind === "pouch" ? template.defaults.thickness : numberInput("thickness"),
+  };
+  if (template.kind !== "pouch") return base;
+  return {
+    ...base,
+    seal: numberInput("seal"),
+    zipper: numberInput("zipper"),
+    corner: numberInput("corner"),
+    hangHole: input("hangHole").checked,
+  };
+}
+
+function bleed(): number {
+  const value = numberInput("bleed");
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function update(): void {
   const error = el("error");
   try {
-    const { dieline, verification } = generate(select.value, {
-      length: numberInput("length"),
-      width: numberInput("width"),
-      depth: numberInput("depth"),
-      thickness: numberInput("thickness"),
-    });
+    const { dieline, verification } = generate(template.id, parameters());
     current = dieline;
+    artCache = null;
     error.hidden = true;
 
     el("flat").innerHTML = toSvg(dieline, { bleed: bleed() });
@@ -79,12 +153,13 @@ function update(): void {
 
     const gsm = numberInput("gsm");
     const metrics = measure(dieline, Number.isFinite(gsm) ? gsm : undefined);
+    const material = template.kind === "pouch" ? "Film area" : "Board area";
     const rows: [string, string][] = [
       ["Blank size", `${metrics.blankWidth.toFixed(1)} × ${metrics.blankHeight.toFixed(1)}`],
-      ["Board area", `${(metrics.boardArea / 1e6).toFixed(4)} m²`],
+      [material, `${(metrics.boardArea / 1e6).toFixed(4)} m²`],
       ["Rectangle used", `${(metrics.rectangleUse * 100).toFixed(0)}%`],
       ["Cut length", `${(metrics.cutLength / 1000).toFixed(2)} m`],
-      ["Crease length", `${(metrics.creaseLength / 1000).toFixed(2)} m`],
+      [template.kind === "pouch" ? "Fold length" : "Crease length", `${(metrics.creaseLength / 1000).toFixed(2)} m`],
     ];
     if (metrics.weightGrams !== undefined) rows.push(["Weight", `${metrics.weightGrams.toFixed(1)} g`]);
     el("metrics").replaceChildren(
@@ -99,6 +174,7 @@ function update(): void {
       }),
     );
     draw();
+    renderMockup();
   } catch (caught) {
     if (!(caught instanceof DielineError)) throw caught;
     error.textContent = caught.message;
@@ -106,24 +182,31 @@ function update(): void {
   }
 }
 
-function bleed(): number {
-  const value = numberInput("bleed");
-  return Number.isFinite(value) && value >= 0 ? value : 0;
+function sizeCanvas(target: HTMLCanvasElement): [number, number, CanvasRenderingContext2D] {
+  const ratio = devicePixelRatio || 1;
+  const width = target.clientWidth;
+  const height = target.clientHeight;
+  if (target.width !== Math.round(width * ratio) || target.height !== Math.round(height * ratio)) {
+    target.width = Math.round(width * ratio);
+    target.height = Math.round(height * ratio);
+  }
+  const ctx = target.getContext("2d")!;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.imageSmoothingQuality = "high";
+  return [width, height, ctx];
 }
 
-/** Painter's-algorithm view of the folding blank. No 3D library needed. */
+/** The right-hand pane: an animated fold for cartons, a filled pouch for pouches. */
 function draw(): void {
   const dieline = current;
   if (!dieline) return;
-  const ratio = devicePixelRatio || 1;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  if (canvas.width !== width * ratio || canvas.height !== height * ratio) {
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
+  if (template.kind === "pouch") {
+    const [width, height, ctx] = sizeCanvas(canvas);
+    renderPouch(ctx, width, height, dieline, art(), { side: "front", finish: finish() });
+    return;
   }
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, width, height);
+  const [width, height] = sizeCanvas(canvas);
 
   const progress = Number(foldInput.value) / 100;
   const panels = foldPanels(dieline, progress);
@@ -154,7 +237,6 @@ function draw(): void {
 
   const faces = panels.map((panel, index) => {
     const view = panel.points.map(toView);
-    // Newell normal, oriented so it points out of the printed side.
     let nx = 0;
     let ny = 0;
     let nz = 0;
@@ -180,15 +262,15 @@ function draw(): void {
 
   // Flaps sit inside the box, so they are drawn before the walls that share their plane.
   const flapBias = radius * 0.2 * progress;
-  const key = (face: (typeof faces)[number]): number =>
-    face.depth + (face.role === "flap" ? flapBias : 0);
+  const key = (face: (typeof faces)[number]): number => face.depth + (face.role === "flap" ? flapBias : 0);
   faces.sort((p, q) => key(q) - key(p));
 
   context.lineJoin = "round";
   context.lineWidth = 1;
   for (const face of faces) {
-    // In view space the camera looks along +z, so a printed side faces it when nz is not positive.
-    const printedSide = face.nz <= 0;
+    // The viewer looks along +z. The oriented normal points away from the printed side,
+    // so the printed side faces the viewer when that normal points away too.
+    const printedSide = face.nz > 0;
     // A flap on a closed box is hidden behind a wall. It shares that wall's plane, so skip it.
     if (face.role === "flap" && printedSide && progress >= 0.98) continue;
     context.beginPath();
@@ -217,7 +299,7 @@ function setFold(value: number): void {
 
 function play(to: number): void {
   cancelAnimationFrame(animation);
-  if (reducedMotion) {
+  if (reducedMotion || template.kind === "pouch") {
     setFold(to);
     return;
   }
@@ -233,34 +315,199 @@ function play(to: number): void {
   animation = requestAnimationFrame(step);
 }
 
-async function save(format: string): Promise<void> {
+async function saveFile(filename: string, data: string | Blob | Uint8Array, type: string): Promise<boolean> {
+  if (downloads) {
+    try {
+      await downloads.save({ filename, data });
+      return true;
+    } catch (caught) {
+      if ((caught as { code?: string }).code !== "declined") throw caught;
+      return false;
+    }
+  }
+  const blob = data instanceof Blob ? data : new Blob([data as BlobPart], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+}
+
+async function saveDieline(format: string): Promise<void> {
   if (!current) return;
-  const filename = `${select.value}.${format}`;
-  const data: string | Uint8Array =
+  const note = el("note");
+  const filename = `${template.id}.${format}`;
+  const data =
     format === "svg"
       ? toSvg(current, { bleed: bleed() })
       : format === "pdf"
         ? toPdf(current, { bleed: bleed() })
         : toDxf(current);
+  const type = format === "svg" ? "image/svg+xml" : format === "pdf" ? "application/pdf" : "application/dxf";
+  try {
+    if (await saveFile(filename, data, type)) note.textContent = `Saved ${filename}.`;
+  } catch {
+    note.textContent = `Could not save ${filename}.`;
+  }
+}
 
-  if (downloads) {
-    try {
-      await downloads.save({ filename, data });
-      note.textContent = `Saved ${filename}.`;
-    } catch (caught) {
-      note.textContent =
-        (caught as { code?: string }).code === "declined" ? "" : `Could not save ${filename}.`;
+/* ---------- Mockup studio ---------- */
+
+function finish(): "gloss" | "matte" {
+  return el<HTMLSelectElement>("finish").value === "matte" ? "matte" : "gloss";
+}
+
+function art(): Art {
+  const dieline = current!;
+  const upload = studio.upload;
+  const key = [
+    template.id,
+    JSON.stringify(dieline.bounds),
+    bleed(),
+    studio.mode,
+    upload?.url ?? "",
+    input("fill").value,
+    studio.turns,
+  ].join("|");
+  if (artCache?.key === key) return artCache.art;
+
+  let result: Art;
+  const status = el("artStatus");
+  status.classList.remove("warn");
+  if (studio.mode === "front") {
+    result = frontArt(dieline, template, bleed(), upload, input("fill").value, studio.turns);
+    status.textContent = upload ? `${upload.name} fills the front panel.` : "";
+  } else if (upload) {
+    const fit = fitUpload(upload.source, upload.width, upload.height, dieline, bleed());
+    result = fit.art;
+    if (fit.mismatch > 0.03) {
+      status.textContent =
+        `${upload.name} is a different shape from this dieline, so it was stretched to fit. ` +
+        "Export the whole artboard of the downloaded template, or check the sizes match.";
+      status.classList.add("warn");
+    } else {
+      status.textContent = `${upload.name} matched ${fit.region}.`;
     }
+  } else {
+    result = sampleArt(dieline, template, bleed());
+    status.textContent = "";
+  }
+  el("sampleChip").hidden = upload !== null;
+  artCache = { key, art: result };
+  return result;
+}
+
+function paint(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  if (!current) return;
+  if (template.kind === "pouch") {
+    renderPouch(ctx, width, height, current, art(), { side: studio.side, finish: finish() });
+  } else {
+    renderBox(ctx, width, height, current, template, art(), {
+      yaw: studio.yaw,
+      pitch: studio.pitch,
+      inside: el<HTMLSelectElement>("inside").value === "kraft" ? "kraft" : "white",
+      finish: finish(),
+    });
+  }
+}
+
+function renderMockup(): void {
+  if (!current) return;
+  const [width, height, ctx] = sizeCanvas(mockCanvas);
+  paint(ctx, width, height);
+}
+
+function syncStudio(): void {
+  const front = studio.mode === "front";
+  el("modeFull").setAttribute("aria-pressed", String(!front));
+  el("modeFront").setAttribute("aria-pressed", String(front));
+  el("fillField").hidden = !front;
+  el("turnField").hidden = !front;
+  el("modeHint").textContent = front
+    ? "Use one image for the front. The rest of the pack takes the pack colour."
+    : "Design on the downloaded SVG or PDF template, hide the dieline layers, and export the whole artboard as an image.";
+  el("bgClear").setAttribute("aria-pressed", String(studio.background === "clear"));
+  el("bgWhite").setAttribute("aria-pressed", String(studio.background === "white"));
+  stage.classList.toggle("clear", studio.background === "clear");
+  el("sideFront").setAttribute("aria-pressed", String(studio.side === "front"));
+  el("sideBack").setAttribute("aria-pressed", String(studio.side === "back"));
+}
+
+const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+
+async function loadDesign(file: File): Promise<void> {
+  const status = el("artStatus");
+  status.classList.add("warn");
+  if (!ACCEPTED.includes(file.type)) {
+    status.textContent = "Use a PNG, JPG, WebP or SVG image. Export a PDF design as PNG first.";
     return;
   }
-  const url = URL.createObjectURL(new Blob([data as BlobPart]));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-  note.textContent = `Saved ${filename}.`;
+  if (file.size > 60 * 1024 * 1024) {
+    status.textContent = "That file is larger than 60 MB. Export a smaller image.";
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  image.src = url;
+  try {
+    await image.decode();
+  } catch {
+    URL.revokeObjectURL(url);
+    status.textContent = "That image could not be opened. Try exporting it again as PNG.";
+    return;
+  }
+  if (!image.naturalWidth || !image.naturalHeight) {
+    URL.revokeObjectURL(url);
+    status.textContent = "That SVG has no size. Export it as PNG, or give the SVG a width and height.";
+    return;
+  }
+  if (studio.upload) URL.revokeObjectURL(studio.upload.url);
+  studio.upload = { source: image, width: image.naturalWidth, height: image.naturalHeight, name: file.name, url };
+  artCache = null;
+  draw();
+  renderMockup();
 }
+
+async function saveMockup(): Promise<void> {
+  if (!current) return;
+  const note = el("mockNote");
+  const size = Number(el<HTMLSelectElement>("size").value) || 2500;
+  const layer = document.createElement("canvas");
+  layer.width = size;
+  layer.height = size;
+  const ctx = layer.getContext("2d")!;
+  ctx.imageSmoothingQuality = "high";
+  paint(ctx, size, size);
+
+  let output = layer;
+  if (studio.background === "white") {
+    output = document.createElement("canvas");
+    output.width = size;
+    output.height = size;
+    const final = output.getContext("2d")!;
+    final.fillStyle = "#ffffff";
+    final.fillRect(0, 0, size, size);
+    final.drawImage(layer, 0, 0);
+  }
+  const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, "image/png"));
+  if (!blob) {
+    note.textContent = "The image was too large for this browser. Choose a smaller size.";
+    return;
+  }
+  const side = template.kind === "pouch" ? `-${studio.side}` : "";
+  const filename = `${template.id}${side}-mockup-${studio.background === "white" ? "white" : "transparent"}.png`;
+  try {
+    if (await saveFile(filename, blob, "image/png")) note.textContent = `Saved ${filename}.`;
+  } catch {
+    note.textContent = `Could not save ${filename}.`;
+  }
+}
+
+/* ---------- Events ---------- */
 
 select.addEventListener("change", () => {
   fillDefaults();
@@ -278,11 +525,12 @@ foldInput.addEventListener("input", () => {
 });
 el("play").addEventListener("click", () => play(Number(foldInput.value) > 50 ? 0 : 100));
 document.querySelectorAll<HTMLButtonElement>("[data-format]").forEach((button) => {
-  button.addEventListener("click", () => void save(button.dataset.format!));
+  button.addEventListener("click", () => void saveDieline(button.dataset.format!));
 });
 
 let dragging: { x: number; y: number } | null = null;
 canvas.addEventListener("pointerdown", (event) => {
+  if (template.kind === "pouch") return;
   dragging = { x: event.clientX, y: event.clientY };
   canvas.setPointerCapture(event.pointerId);
 });
@@ -295,14 +543,81 @@ canvas.addEventListener("pointermove", (event) => {
 });
 canvas.addEventListener("pointerup", () => (dragging = null));
 canvas.addEventListener("pointercancel", () => (dragging = null));
-new ResizeObserver(draw).observe(canvas);
 
-el<HTMLInputElement>("bleed").value = "3";
-el<HTMLInputElement>("gsm").value = "350";
+let turning: { x: number; y: number } | null = null;
+mockCanvas.addEventListener("pointerdown", (event) => {
+  if (template.kind === "pouch") return;
+  turning = { x: event.clientX, y: event.clientY };
+  mockCanvas.setPointerCapture(event.pointerId);
+});
+mockCanvas.addEventListener("pointermove", (event) => {
+  if (!turning) return;
+  studio.yaw += (event.clientX - turning.x) * 0.008;
+  studio.pitch = Math.max(-0.15, Math.min(1.3, studio.pitch + (event.clientY - turning.y) * 0.008));
+  turning = { x: event.clientX, y: event.clientY };
+  renderMockup();
+});
+mockCanvas.addEventListener("pointerup", () => (turning = null));
+mockCanvas.addEventListener("pointercancel", () => (turning = null));
+
+const studioButton = (id: string, action: () => void): void => {
+  el(id).addEventListener("click", () => {
+    action();
+    syncStudio();
+    draw();
+    renderMockup();
+  });
+};
+studioButton("modeFull", () => (studio.mode = "full"));
+studioButton("modeFront", () => (studio.mode = "front"));
+studioButton("bgClear", () => (studio.background = "clear"));
+studioButton("bgWhite", () => (studio.background = "white"));
+studioButton("sideFront", () => (studio.side = "front"));
+studioButton("sideBack", () => (studio.side = "back"));
+studioButton("turnArt", () => (studio.turns = (studio.turns + 1) % 4));
+for (const id of ["fill", "inside", "finish"]) {
+  el(id).addEventListener("input", () => {
+    draw();
+    renderMockup();
+  });
+}
+input("artFile").addEventListener("change", () => {
+  const file = input("artFile").files?.[0];
+  if (file) void loadDesign(file);
+  input("artFile").value = "";
+});
+for (const zone of [el("drop"), stage]) {
+  zone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    el("drop").classList.add("over");
+  });
+  zone.addEventListener("dragleave", () => el("drop").classList.remove("over"));
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    el("drop").classList.remove("over");
+    const file = event.dataTransfer?.files[0];
+    if (file) void loadDesign(file);
+  });
+}
+el("saveMockup").addEventListener("click", () => void saveMockup());
+
+new ResizeObserver(() => {
+  draw();
+  renderMockup();
+}).observe(canvas);
+new ResizeObserver(renderMockup).observe(mockCanvas);
+
+input("bleed").value = "3";
+input("gsm").value = "350";
 fillDefaults();
 update();
 foldInput.value = "0";
 play(72);
+void document.fonts?.ready.then(() => {
+  artCache = null;
+  draw();
+  renderMockup();
+});
 
 // Inside Claude, saves go through the viewer. That route has no DXF type, so DXF is only offered on the open web.
 window.claude?.use("downloads").then((namespace) => {

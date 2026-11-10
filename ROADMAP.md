@@ -14,9 +14,11 @@ Priorities may change as people use the project.
 
 ## Design
 
-- [ ] Place artwork on panels with correct rotation for each face
+- [x] Place artwork on panels with correct rotation for each face
 - [ ] Safe zones and fold-aware barcode placement
-- [ ] Render the folded box with artwork
+- [x] Render the folded box with artwork
+- [x] Flat and stand-up zip pouches
+- [ ] Pouch mockups in 3D, and spouted or flat-bottom pouches
 
 ## Hosted service
 

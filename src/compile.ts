@@ -5,6 +5,7 @@ import {
   distance,
   edgeKey,
   parameterOnSegment,
+  pointInPolygon,
   pointKey,
   samePoint,
   segmentsCross,
@@ -49,6 +50,13 @@ export function compile(spec: DielineSpec): Dieline {
     return { ...panel, area: area(panel.polygon), ...(hinge ? { hinge } : {}) };
   });
 
+  const innerCuts = spec.innerCuts ?? [];
+  for (const hole of innerCuts) {
+    if (hole.length < 3 || !hole.every((point) => pointInPolygon(point, cut))) {
+      throw new DielineError("INVALID_PANEL", "An inner cut must sit fully inside the blank.");
+    }
+  }
+
   return {
     template: spec.template,
     panels,
@@ -57,6 +65,9 @@ export function compile(spec: DielineSpec): Dieline {
     bounds: bounds(cut),
     foldedSize: spec.foldedSize,
     openFaces: spec.openFaces,
+    innerCuts,
+    guides: spec.guides ?? [],
+    ...(spec.pouch ? { pouch: spec.pouch } : {}),
   };
 }
 
@@ -218,13 +229,19 @@ function farthestPair(points: readonly Vec2[]): [Vec2, Vec2] {
   return pair;
 }
 
-/** Picks the rotation direction that folds the panel away from the printed side (-z). */
+/**
+ * Picks the rotation direction that folds the panel away from the printed side.
+ *
+ * With +x right and +y down, a right-handed z axis points away from someone looking at
+ * the flat dieline. That person sees the printed side, so the printed side faces -z and
+ * panels fold towards +z.
+ */
 function signedFoldAngle(panel: PanelSpec, from: Vec2, to: Vec2): number {
   const [cx, cy] = centroid(panel.polygon);
   const ux = to[0] - from[0];
   const uy = to[1] - from[1];
   const zOfRotation = ux * (cy - from[1]) - uy * (cx - from[0]);
-  const direction = zOfRotation > 0 ? -1 : 1;
+  const direction = zOfRotation > 0 ? 1 : -1;
   return (direction * (panel.foldAngle ?? 90) * Math.PI) / 180;
 }
 

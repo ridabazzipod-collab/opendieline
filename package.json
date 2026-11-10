@@ -1,7 +1,7 @@
 {
   "name": "opendieline",
-  "version": "0.1.0",
-  "description": "Parametric packaging dieline engine: generates print-ready box templates and proves they fold closed.",
+  "version": "0.2.0",
+  "description": "Parametric packaging dieline engine: print-ready box and pouch templates, fold checks and mockups.",
   "type": "module",
   "license": "Apache-2.0",
   "keywords": ["packaging", "dieline", "die-cut", "box", "svg", "pdf", "dxf", "cad", "print"],

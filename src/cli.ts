@@ -15,14 +15,21 @@ Options:
   -w, --width <mm>       Inside width
   -d, --depth <mm>       Inside depth
   -t, --thickness <mm>   Board thickness
+      --seal <mm>        Pouch side seal width
+      --zipper <mm>      Pouch: distance from the top edge to the zipper
+      --corner <mm>      Pouch: top corner radius
+      --hang-hole <yes|no>  Pouch: add a hang hole
       --bleed <mm>       Bleed guide (default 3)
       --gsm <g/m2>       Board weight, used to estimate blank weight
   -f, --format <list>    Comma-separated: svg,pdf,dxf,json (default svg,pdf,dxf)
   -o, --out <dir>        Output folder (default .)
   -h, --help             Show this help
 
-Example:
+Pouches use --length for width, --depth for height and --width for the gusset.
+
+Examples:
   opendieline generate reverse-tuck-end -l 80 -w 40 -d 120 -t 0.5 -o out
+  opendieline generate stand-up-pouch -l 140 -w 80 -d 220 --zipper 35 -o out
 `;
 
 const FORMATS = ["svg", "pdf", "dxf", "json"] as const;
@@ -44,6 +51,10 @@ function run(argv: string[]): number {
       width: { type: "string", short: "w" },
       depth: { type: "string", short: "d" },
       thickness: { type: "string", short: "t" },
+      seal: { type: "string" },
+      zipper: { type: "string" },
+      corner: { type: "string" },
+      "hang-hole": { type: "string" },
       bleed: { type: "string" },
       gsm: { type: "string" },
       format: { type: "string", short: "f" },
@@ -60,7 +71,7 @@ function run(argv: string[]): number {
 
   if (command === "list") {
     for (const template of templates) {
-      console.log(`${template.id.padEnd(24)} ${template.description}`);
+      console.log(`${template.id.padEnd(24)} ${template.kind.padEnd(7)} ${template.description}`);
     }
     return 0;
   }
@@ -71,11 +82,20 @@ function run(argv: string[]): number {
   }
 
   const defaults = getTemplate(templateId).defaults;
+  const hangHole = values["hang-hole"];
+  if (hangHole !== undefined && hangHole !== "yes" && hangHole !== "no") {
+    throw new DielineError("INVALID_PARAMETER", "--hang-hole must be yes or no.");
+  }
   const parameters = {
+    ...defaults,
     length: numberOption("length", values.length, defaults.length),
     width: numberOption("width", values.width, defaults.width),
     depth: numberOption("depth", values.depth, defaults.depth),
     thickness: numberOption("thickness", values.thickness, defaults.thickness),
+    ...(values.seal === undefined ? {} : { seal: numberOption("seal", values.seal, 0) }),
+    ...(values.zipper === undefined ? {} : { zipper: numberOption("zipper", values.zipper, 0) }),
+    ...(values.corner === undefined ? {} : { corner: numberOption("corner", values.corner, 0) }),
+    ...(hangHole === undefined ? {} : { hangHole: hangHole === "yes" }),
   };
   const bleed = numberOption("bleed", values.bleed, 3);
   const gsm = values.gsm === undefined ? undefined : numberOption("gsm", values.gsm, 0);

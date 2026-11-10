@@ -123,6 +123,17 @@ export function rect(x0: number, y0: number, x1: number, y1: number): Vec2[] {
   ];
 }
 
+/** Even-odd test. Points exactly on an edge may go either way. */
+export function pointInPolygon([px, py]: Vec2, polygon: readonly Vec2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i]!;
+    const [xj, yj] = polygon[j]!;
+    if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 export interface Bounds {
   minX: number;
   minY: number;

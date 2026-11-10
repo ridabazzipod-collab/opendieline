@@ -1,8 +1,13 @@
 import { rect } from "../geometry.js";
-import { resolveDimensions, sideFlap, type Template } from "./common.js";
+import { resolveDimensions, sideFlap, type Template, CARTON_LABELS } from "./common.js";
 
 export const sleeve: Template = {
   id: "sleeve",
+  kind: "carton",
+  labels: CARTON_LABELS,
+  upright: "y",
+  frontPanel: "front",
+  frontRotation: 0,
   name: "Sleeve",
   description: "Open-ended wrap that slides over a tray or product.",
   defaults: { length: 120, width: 80, depth: 160, thickness: 0.5 },

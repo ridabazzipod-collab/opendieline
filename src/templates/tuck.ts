@@ -1,6 +1,6 @@
 import { rect } from "../geometry.js";
 import type { DielineSpec, PanelSpec } from "../model.js";
-import { endFlap, resolveDimensions, sideFlap, tuckTab, type BoxParameters, type Template } from "./common.js";
+import { endFlap, resolveDimensions, sideFlap, tuckTab, type BoxParameters, type Template, CARTON_LABELS } from "./common.js";
 
 const RELIEF_MM = 0.5;
 
@@ -87,6 +87,11 @@ function tuckBox(template: string, parameters: BoxParameters, reverse: boolean):
 
 export const straightTuckEnd: Template = {
   id: "straight-tuck-end",
+  kind: "carton",
+  labels: CARTON_LABELS,
+  upright: "y",
+  frontPanel: "front",
+  frontRotation: 0,
   name: "Straight tuck end",
   description: "Retail carton with both lids on the back panel, for a clean front face.",
   defaults: { length: 80, width: 40, depth: 120, thickness: 0.5 },
@@ -95,6 +100,11 @@ export const straightTuckEnd: Template = {
 
 export const reverseTuckEnd: Template = {
   id: "reverse-tuck-end",
+  kind: "carton",
+  labels: CARTON_LABELS,
+  upright: "y",
+  frontPanel: "front",
+  frontRotation: 0,
   name: "Reverse tuck end",
   description: "Common folding carton with lids on opposite panels, which nests well on the sheet.",
   defaults: { length: 80, width: 40, depth: 120, thickness: 0.5 },

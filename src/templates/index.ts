@@ -1,11 +1,13 @@
 import { DielineError } from "../model.js";
 import type { Template } from "./common.js";
+import { standUpPouch, zipPouch } from "./pouch.js";
 import { regularSlottedCarton } from "./rsc.js";
 import { sleeve } from "./sleeve.js";
 import { mailer, tray } from "./tray.js";
 import { reverseTuckEnd, straightTuckEnd } from "./tuck.js";
 
-export type { BoxParameters, Template } from "./common.js";
+export type { BoxParameters, FieldLabels, Template, TemplateKind } from "./common.js";
+export { resolvePouch, verifyPouch } from "./pouch.js";
 
 export const templates: readonly Template[] = [
   reverseTuckEnd,
@@ -14,6 +16,8 @@ export const templates: readonly Template[] = [
   tray,
   mailer,
   regularSlottedCarton,
+  zipPouch,
+  standUpPouch,
 ];
 
 export function getTemplate(id: string): Template {

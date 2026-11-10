@@ -19,6 +19,31 @@ export interface PanelSpec {
   foldAngle?: number;
 }
 
+export type GuideKind = "seal" | "zipper";
+
+/** A non-cutting production mark, such as a heat-seal area or a zipper line. */
+export interface Guide {
+  kind: GuideKind;
+  points: readonly Vec2[];
+  closed: boolean;
+}
+
+/** Resolved sizes of a pouch, in mm. */
+export interface PouchInfo {
+  width: number;
+  height: number;
+  /** Bottom gusset depth. Zero for a flat pouch. */
+  gusset: number;
+  seal: number;
+  topSeal: number;
+  /** Distance from the top edge to the zipper centre line. */
+  zipper: number;
+  corner: number;
+  /** Distance from the top edge to the tear notches. */
+  notchY: number;
+  hangHole: boolean;
+}
+
 export interface DielineSpec {
   template: string;
   panels: readonly PanelSpec[];
@@ -26,6 +51,10 @@ export interface DielineSpec {
   foldedSize: readonly [number, number, number];
   /** Number of box faces that are open by design: 1 for a tray, 2 for a sleeve. */
   openFaces: number;
+  /** Closed cut paths inside the blank, such as a hang hole. */
+  innerCuts?: readonly (readonly Vec2[])[];
+  guides?: readonly Guide[];
+  pouch?: PouchInfo;
 }
 
 export interface Hinge {
@@ -57,6 +86,9 @@ export interface Dieline {
   bounds: Bounds;
   foldedSize: readonly [number, number, number];
   openFaces: number;
+  innerCuts: readonly (readonly Vec2[])[];
+  guides: readonly Guide[];
+  pouch?: PouchInfo;
 }
 
 export type DielineErrorCode =

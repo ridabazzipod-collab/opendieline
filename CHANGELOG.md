@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+- Added flat zip pouch and stand-up zip pouch templates, with seals, zipper, tear notches,
+  hang hole and bottom gusset.
+- Added seal and zipper layers to SVG, PDF and DXF export, and inner cuts for holes.
+- Added the mockup studio: place a full dieline design or a front image, turn the box,
+  and download a PNG with a transparent or white background.
+- Fixed the fold direction so the printed side ends up outside. Fold checks were not
+  affected, but artwork would have appeared mirrored.
+
 ## 0.1.0
 
 First release.

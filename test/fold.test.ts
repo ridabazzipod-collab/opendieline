@@ -25,10 +25,10 @@ describe("foldPanels", () => {
     }
   });
 
-  it("folds every panel away from the printed side", () => {
+  it("folds every panel away from the printed side, towards +z", () => {
     const { dieline } = generate("tray", { length: 180, width: 120, depth: 40, thickness: 1 });
     const zs = foldPanels(dieline, 1).flatMap((panel) => panel.points.map((p) => p[2]));
-    expect(Math.max(...zs)).toBeLessThan(1e-6);
+    expect(Math.min(...zs)).toBeGreaterThan(-1e-6);
   });
 });
 

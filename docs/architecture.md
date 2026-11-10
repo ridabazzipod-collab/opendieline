@@ -14,9 +14,11 @@ Template  →  compile()  →  Dieline  →  verifyFold()  →  exporters
 
 ## Coordinates
 
-The blank lies in the `z = 0` plane, in millimetres, with `+x` right and `+y` down. The
-printed side is the outside of the box. The root panel stays still, and every other panel
-folds away from the printed side.
+The blank lies in the `z = 0` plane, in millimetres, with `+x` right and `+y` down. In a
+right-handed system `+z` then points away from someone looking at the flat dieline, so the
+side they see, the printed outside, faces `-z`. The root panel stays still, and every other
+panel folds away from the printed side, towards `+z`. Folding this way keeps artwork the
+right way round in 3D mockups.
 
 ## Compiling
 

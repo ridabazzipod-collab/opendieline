@@ -1,4 +1,4 @@
-import { distance, type Vec2 } from "./geometry.js";
+import { area, distance, type Vec2 } from "./geometry.js";
 import type { Dieline } from "./model.js";
 
 export interface Metrics {
@@ -20,14 +20,15 @@ function pathLength(path: readonly Vec2[]): number {
 }
 
 export function measure(dieline: Dieline, gsm?: number): Metrics {
-  const boardArea = dieline.panels.reduce((sum, panel) => sum + panel.area, 0);
+  const holes = dieline.innerCuts.reduce((sum, hole) => sum + area(hole), 0);
+  const boardArea = dieline.panels.reduce((sum, panel) => sum + panel.area, 0) - holes;
   const { width, height } = dieline.bounds;
   return {
     blankWidth: width,
     blankHeight: height,
     boardArea,
     rectangleUse: boardArea / (width * height),
-    cutLength: pathLength(dieline.cut),
+    cutLength: [dieline.cut, ...dieline.innerCuts].reduce((sum, path) => sum + pathLength(path), 0),
     creaseLength: dieline.creases.reduce((sum, c) => sum + distance(c.from, c.to), 0),
     ...(gsm === undefined ? {} : { weightGrams: (boardArea / 1e6) * gsm }),
   };

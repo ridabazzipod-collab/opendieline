@@ -20,7 +20,7 @@ function escapePdfText(text: string): string {
 /**
  * A one-page, full-scale vector PDF. Cut and crease lines use the spot colours
  * "CutContour" and "Crease", so RIPs and cutting tables can separate them from
- * artwork.
+ * artwork. Pouch seal areas and zipper lines use "Seal" and "Zipper".
  */
 export function toPdf(dieline: Dieline, options: PdfOptions = {}): Uint8Array {
   const bleed = options.bleed ?? 3;
@@ -33,8 +33,12 @@ export function toPdf(dieline: Dieline, options: PdfOptions = {}): Uint8Array {
   const toPage = ([x, y]: Vec2): string =>
     `${fixed((x - minX + pad) * POINTS_PER_MM)} ${fixed(pageH - (y - minY + pad) * POINTS_PER_MM)}`;
 
-  const outline =
-    dieline.cut.map((point, i) => `${toPage(point)} ${i === 0 ? "m" : "l"}`).join("\n") + "\nh\n";
+  const pathOps = (points: readonly Vec2[]): string =>
+    points.map((point, i) => `${toPage(point)} ${i === 0 ? "m" : "l"}`).join("\n");
+  const outline = `${pathOps(dieline.cut)}\nh\n`;
+  const holes = dieline.innerCuts.map((hole) => `${pathOps(hole)}\nh\n`).join("");
+  const seals = dieline.guides.filter((guide) => guide.kind === "seal");
+  const zippers = dieline.guides.filter((guide) => guide.kind === "zipper");
 
   const content: string[] = ["q", "1 j 1 J"];
   if (bleed > 0) {
@@ -44,14 +48,27 @@ export function toPdf(dieline: Dieline, options: PdfOptions = {}): Uint8Array {
       `${outline}B`,
     );
   }
-  content.push("1 1 1 rg", `${outline}f`);
+  content.push("1 1 1 rg", `${outline}${holes}f*`);
+
+  if (seals.length > 0) {
+    content.push("q", `${outline}W n`, "/Seal cs 0.22 scn");
+    for (const seal of seals) content.push(`${pathOps(seal.points)}\nh\nf`);
+    content.push("Q");
+  }
 
   content.push("/Crease CS 1 SCN", `${fixed(0.25 * POINTS_PER_MM)} w`, "[8.5 5.7] 0 d");
   for (const { from, to } of dieline.creases) {
     content.push(`${toPage(from)} m ${toPage(to)} l S`);
   }
 
-  content.push("[] 0 d", "/CutContour CS 1 SCN", `${outline}S`);
+  if (zippers.length > 0) {
+    content.push("/Zipper CS 1 SCN", `${fixed(0.5 * POINTS_PER_MM)} w`);
+    for (const zipper of zippers) {
+      content.push(`${pathOps(zipper.points)}${zipper.closed ? "\nh" : ""}\nS`);
+    }
+  }
+
+  content.push("[] 0 d", `${fixed(0.25 * POINTS_PER_MM)} w`, "/CutContour CS 1 SCN", `${outline}${holes}S`);
 
   if (options.labels ?? true) {
     const fontSize = Math.max(7, Math.max(width, height) * 0.014 * POINTS_PER_MM);
@@ -82,7 +99,9 @@ export function toPdf(dieline: Dieline, options: PdfOptions = {}): Uint8Array {
     `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fixed(pageW)} ${fixed(pageH)}] ` +
       `/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> ` +
       `/ColorSpace << /CutContour ${separation("CutContour", "0 1 0 0")} ` +
-      `/Crease ${separation("Crease", "1 0 0 0")} >> >> >>`,
+      `/Crease ${separation("Crease", "1 0 0 0")} ` +
+      `/Seal ${separation("Seal", "0 0 0 0.6")} ` +
+      `/Zipper ${separation("Zipper", "0.85 0 0.75 0")} >> >> >>`,
     `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     `<< /Title (${escapePdfText(`${dieline.template} dieline`)}) /Producer (OpenDieline) >>`,

@@ -26,7 +26,7 @@ describe.each(templates.map((template) => [template.id, template] as const))("%s
     expect(verification.checks.filter((check) => !check.passed)).toEqual([]);
   });
 
-  it("adds board thickness to every crease-to-crease size", () => {
+  it.runIf(template.kind === "carton")("adds board thickness to every crease-to-crease size", () => {
     const { defaults } = template;
     const thin = generate(id, { ...defaults, thickness: 0 }).dieline;
     const thick = generate(id, { ...defaults, thickness: 2 }).dieline;
@@ -40,7 +40,7 @@ describe.each(templates.map((template) => [template.id, template] as const))("%s
 
 describe("exhaustive proportions", () => {
   const sizes = [40, 75, 130, 260];
-  for (const template of templates) {
+  for (const template of templates.filter((candidate) => candidate.kind === "carton")) {
     it(`${template.id} folds across box proportions`, () => {
       for (const length of sizes) {
         for (const width of sizes) {

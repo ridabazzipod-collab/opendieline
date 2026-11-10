@@ -1,6 +1,6 @@
 import { rect } from "../geometry.js";
 import type { DielineSpec, PanelSpec } from "../model.js";
-import { resolveDimensions, sideFlap, tuckTab, type Template } from "./common.js";
+import { resolveDimensions, sideFlap, tuckTab, type Template, CARTON_LABELS } from "./common.js";
 
 const TAB_INSET_MM = 1;
 
@@ -26,6 +26,11 @@ function cornerTabs(wall: string, y0: number, y1: number, a: number, width: numb
 
 export const tray: Template = {
   id: "tray",
+  kind: "carton",
+  labels: CARTON_LABELS,
+  upright: "z",
+  frontPanel: "south",
+  frontRotation: 180,
   name: "Open tray",
   description: "Four-wall display tray with glued corners.",
   defaults: { length: 180, width: 120, depth: 40, thickness: 1 },
@@ -52,6 +57,11 @@ export const tray: Template = {
 
 export const mailer: Template = {
   id: "mailer",
+  kind: "carton",
+  labels: CARTON_LABELS,
+  upright: "z",
+  frontPanel: "lid",
+  frontRotation: 180,
   name: "Mailer box",
   description: "Self-closing shipping box with a hinged lid and front tuck.",
   defaults: { length: 220, width: 160, depth: 60, thickness: 1.5 },

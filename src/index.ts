@@ -15,13 +15,16 @@ export type {
   Dieline,
   DielineErrorCode,
   DielineSpec,
+  Guide,
+  GuideKind,
+  PouchInfo,
   Hinge,
   Panel,
   PanelRole,
   PanelSpec,
 } from "./model.js";
-export { getTemplate, templates } from "./templates/index.js";
-export type { BoxParameters, Template } from "./templates/index.js";
+export { getTemplate, resolvePouch, templates, verifyPouch } from "./templates/index.js";
+export type { BoxParameters, FieldLabels, Template, TemplateKind } from "./templates/index.js";
 export { toDxf } from "./export/dxf.js";
 export { toPdf } from "./export/pdf.js";
 export type { PdfOptions } from "./export/pdf.js";
@@ -33,8 +36,13 @@ export interface GeneratedDieline {
   verification: FoldVerification;
 }
 
-/** Builds a dieline from a template, compiles it and folds it to verify the result. */
+/**
+ * Builds a dieline from a template and compiles it. Cartons are folded in 3D to verify
+ * them. Pouches get production checks for seals, zipper and notches instead.
+ */
 export function generate(templateId: string, parameters: BoxParameters): GeneratedDieline {
-  const dieline = compile(getTemplate(templateId).build(parameters));
-  return { dieline, verification: verifyFold(dieline) };
+  const template = getTemplate(templateId);
+  const dieline = compile(template.build(parameters));
+  const verification = template.verify ? template.verify(dieline) : verifyFold(dieline);
+  return { dieline, verification };
 }

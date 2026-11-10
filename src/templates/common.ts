@@ -1,22 +1,51 @@
 import { arc, type Vec2 } from "../geometry.js";
-import { DielineError, type DielineSpec } from "../model.js";
+import type { FoldVerification } from "../fold.js";
+import { DielineError, type Dieline, type DielineSpec } from "../model.js";
 
 /** Box dimensions in millimetres. Length, width and depth are inside sizes. */
 export interface BoxParameters {
   length: number;
   width: number;
   depth: number;
-  /** Board thickness in mm. */
+  /** Board thickness in mm. Pouches ignore it. */
   thickness: number;
+  /** Pouch side seal width in mm. */
+  seal?: number;
+  /** Pouch: distance from the top edge to the zipper centre line, in mm. */
+  zipper?: number;
+  /** Pouch: radius of the top corners in mm. */
+  corner?: number;
+  /** Pouch: add a hang hole in the top seal. */
+  hangHole?: boolean;
 }
+
+export type TemplateKind = "carton" | "pouch";
+
+/** What each size means for this template. `null` hides a size that is not used. */
+export interface FieldLabels {
+  length: string;
+  width: string | null;
+  depth: string;
+}
+
+export const CARTON_LABELS: FieldLabels = { length: "Length", width: "Width", depth: "Depth" };
 
 export interface Template {
   id: string;
   name: string;
   description: string;
   /** Typical parameters, also used as the defaults in the CLI and playground. */
+  kind: TemplateKind;
+  labels: FieldLabels;
   defaults: BoxParameters;
+  /** The axis that points up when the finished pack stands on a table. */
+  upright: "y" | "z";
+  /** The panel shown to customers, and how far to turn a front image to read upright on it. */
+  frontPanel: string;
+  frontRotation: 0 | 90 | 180 | 270;
   build(parameters: BoxParameters): DielineSpec;
+  /** Checks for templates that do not fold into a box, such as pouches. */
+  verify?(dieline: Dieline): FoldVerification;
 }
 
 export interface BoxDimensions extends BoxParameters {
