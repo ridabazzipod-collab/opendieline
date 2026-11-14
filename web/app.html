@@ -140,6 +140,9 @@ dd { margin: 0; font: 400 16px/1.3 var(--mono); font-variant-numeric: tabular-nu
 #mockup.turnable:active { cursor: grabbing; }
 .chip { position: absolute; top: 12px; left: 12px; font: 600 12px/1 var(--mono); background: var(--ink); color: var(--surface); padding: 6px 8px; border-radius: 3px; }
 .stage-tip { position: absolute; bottom: 12px; right: 12px; font: 400 12px/1 var(--mono); color: #58665f; background: rgba(255,255,255,0.85); padding: 6px 8px; border-radius: 3px; }
+#guideView { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; }
+#guideControls { display: grid; gap: 6px; }
+.guide-row { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
 footer { color: var(--muted); font-size: 13px; }
 @media (max-width: 980px) {
   .bench, .readout, .studio { grid-template-columns: minmax(0, 1fr); }
@@ -169,7 +172,7 @@ footer { color: var(--muted); font-size: 13px; }
       <div class="grid2">
         <div class="field"><label for="length" id="lengthLabel">Length mm</label><input id="length" type="number" min="1" step="1" inputmode="decimal"></div>
         <div class="field" id="widthField"><label for="width" id="widthLabel">Width mm</label><input id="width" type="number" min="1" step="1" inputmode="decimal"></div>
-        <div class="field"><label for="depth" id="depthLabel">Depth mm</label><input id="depth" type="number" min="1" step="1" inputmode="decimal"></div>
+        <div class="field" id="depthField"><label for="depth" id="depthLabel">Depth mm</label><input id="depth" type="number" min="1" step="1" inputmode="decimal"></div>
         <div class="field" id="thicknessField"><label for="thickness">Board mm</label><input id="thickness" type="number" min="0" step="0.1" inputmode="decimal"></div>
       </div>
       <div class="grid2" id="pouchFields" hidden>
@@ -240,6 +243,13 @@ footer { color: var(--muted); font-size: 13px; }
         <span>or drop it here. PNG, JPG, WebP or SVG.</span>
       </label>
       <p id="artStatus" class="note" role="status"></p>
+      <button type="button" id="detect" hidden>Read the panels from this picture</button>
+      <div class="field" id="guides" hidden>
+        <span class="label">Panel lines</span>
+        <canvas id="guideView" aria-label="Your picture with the panel lines found"></canvas>
+        <p class="hint">Blue lines are panel edges, yellow lines are the lid top and the top and bottom of the walls. Move them until they sit on your picture's panel edges.</p>
+        <div id="guideControls"></div>
+      </div>
       <div class="grid2">
         <div class="field" id="fillField" hidden><label for="fill">Pack colour</label><input id="fill" type="color" value="#f4efe6"></div>
         <div class="field" id="turnField" hidden><span class="label">Front image</span><button type="button" id="turnArt">Turn 90°</button></div>

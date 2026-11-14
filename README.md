@@ -81,6 +81,12 @@ It is a single file and needs no server.
    dieline with bleed, or the dieline alone, and warns you if the shape does not match.
 4. Pick a transparent or white background and download the PNG.
 
+**Your own dieline picture.** If your finished dieline is a PNG with a transparent
+background and does not match the chosen pack style, the app reads the outline, finds the
+four wall panels, the lid and the glue flap, and builds a carton from your picture. The
+artwork then lands on each panel exactly where you placed it. A thin sticker outline around
+the dieline is ignored. Move the panel lines under the picture if an edge is off.
+
 For a quick preview, choose **Front image** and add one image for the front panel.
 
 Pouch sizes use the same fields as boxes: `--length` is the pouch width, `--depth` is the

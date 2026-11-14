@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- The mockup studio now reads finished dieline pictures that do not match a built-in
+  pack style. It finds the four wall panels, the lid and the glue flap from the outline of a
+  PNG with a transparent background, ignores a thin sticker outline, and builds a carton
+  from them, so the artwork is placed exactly as designed.
+- Added panel lines under the picture to correct any edge, and a choice of which panel
+  carries the lid.
+- `generate` accepts a template object as well as a template id.
+
 ## 0.2.1
 
 - Fixed designs that would not open in previews that block image links.

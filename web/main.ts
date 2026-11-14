@@ -1,5 +1,7 @@
 import {
   DielineError,
+  customCartonTemplate,
+  findCarton,
   foldPanels,
   generate,
   getTemplate,
@@ -7,9 +9,11 @@ import {
   templates,
   toDxf,
   toPdf,
+  layoutFromPixels,
   toSvg,
   type BoxParameters,
   type Dieline,
+  type PixelLayout,
   type Template,
 } from "../src/index.js";
 import { fitUpload, frontArt, renderBox, renderPouch, sampleArt, type Art } from "./mockup.js";
@@ -62,20 +66,30 @@ const studio = {
 };
 let artCache: { key: string; art: Art } | null = null;
 
+/** A carton read from the uploaded dieline picture. Its panel lines are in picture pixels. */
+const CUSTOM_ID = "from-image";
+let custom: { template: Template; layout: PixelLayout; upload: Upload } | null = null;
+
+function templateFor(id: string): Template {
+  return id === CUSTOM_ID && custom ? custom.template : getTemplate(id);
+}
+
 for (const option of templates) select.add(new Option(option.name, option.id));
 
 function fillDefaults(): void {
-  template = getTemplate(select.value);
+  template = templateFor(select.value);
   const { defaults, labels } = template;
   for (const key of ["length", "width", "depth", "thickness"] as const) input(key).value = String(defaults[key]);
   el("lengthLabel").textContent = `${labels.length} mm`;
   el("depthLabel").textContent = `${labels.depth} mm`;
   el("widthLabel").textContent = `${labels.width ?? "Width"} mm`;
   el("widthField").hidden = labels.width === null;
+  el("depthField").hidden = template.id === CUSTOM_ID;
+  el("guides").hidden = !(custom && template.id === CUSTOM_ID);
 
   const pouch = template.kind === "pouch";
   el("pouchFields").hidden = !pouch;
-  el("thicknessField").hidden = pouch;
+  el("thicknessField").hidden = pouch || template.id === CUSTOM_ID;
   if (pouch) {
     input("seal").value = String(defaults.seal ?? 8);
     input("zipper").value = String(defaults.zipper ?? 30);
@@ -129,7 +143,7 @@ function bleed(): number {
 function update(): void {
   const error = el("error");
   try {
-    const { dieline, verification } = generate(template.id, parameters());
+    const { dieline, verification } = generate(template, parameters());
     current = dieline;
     artCache = null;
     error.hidden = true;
@@ -374,6 +388,7 @@ function art(): Art {
     upload?.id ?? "",
     input("fill").value,
     studio.turns,
+    template.id === CUSTOM_ID ? `${JSON.stringify(custom?.layout)}|${input("length").value}` : "",
   ].join("|");
   if (artCache?.key === key) return artCache.art;
 
@@ -383,6 +398,12 @@ function art(): Art {
   if (studio.mode === "front") {
     result = frontArt(dieline, template, bleed(), upload, input("fill").value, studio.turns);
     status.textContent = upload ? `${upload.name} fills the front panel.` : "";
+  } else if (upload && template.id === CUSTOM_ID && custom && custom.upload.id === upload.id) {
+    result = customArt(upload, custom.layout, numberInput("length"));
+    status.textContent = custom.layout.guessed
+      ? `${upload.name}: the panel edges are a guess. Move the panel lines to fit.`
+      : `${upload.name} was read as a four-panel carton. Move the panel lines if an edge is off.`;
+    if (custom.layout.guessed) status.classList.add("warn");
   } else if (upload) {
     const fit = fitUpload(upload.source, upload.width, upload.height, dieline, bleed());
     result = fit.art;
@@ -435,6 +456,7 @@ function syncStudio(): void {
   el("bgClear").setAttribute("aria-pressed", String(studio.background === "clear"));
   el("bgWhite").setAttribute("aria-pressed", String(studio.background === "white"));
   stage.classList.toggle("clear", studio.background === "clear");
+  el("detect").hidden = !(studio.upload && !front && template.kind === "carton");
   el("sideFront").setAttribute("aria-pressed", String(studio.side === "front"));
   el("sideBack").setAttribute("aria-pressed", String(studio.side === "back"));
 }
@@ -465,8 +487,199 @@ async function loadDesign(file: File): Promise<void> {
   }
   studio.upload = { ...image, name: file.name, id: ++uploads };
   artCache = null;
+  const upload = studio.upload;
+  syncStudio();
+  const carton = template.kind === "carton" || template.id === CUSTOM_ID;
+  if (studio.mode === "full" && carton) {
+    const own = template.id === CUSTOM_ID;
+    const fit = !own && current ? fitUpload(upload.source, upload.width, upload.height, current, bleed()) : null;
+    // A picture that fits the chosen dieline is used as it is. Anything else is read as its own carton.
+    if (own || (fit && fit.mismatch > 0.03)) {
+      if (readPicture(upload)) return;
+      status.classList.add("warn");
+      status.textContent = fit
+        ? `${file.name} does not match this dieline, and no panels could be read from it. ` +
+          "Save it as a PNG with a transparent background around the dieline, or pick the matching pack style."
+        : `No panels could be read from ${file.name}. Save it as a PNG with a transparent background around the dieline.`;
+    }
+  }
   draw();
   renderMockup();
+}
+
+/** Reads the carton in a picture and switches to a template made from it. */
+function readPicture(upload: Upload): boolean {
+  const layout = readCarton(upload);
+  if (!layout) return false;
+  custom = { template: customCartonTemplate(layoutFromPixels(layout)), layout, upload };
+  if (![...select.options].some((option) => option.value === CUSTOM_ID)) select.add(new Option("From your dieline picture", CUSTOM_ID));
+  select.value = CUSTOM_ID;
+  fillDefaults();
+  update();
+  buildGuides();
+  return true;
+}
+
+/** Finds the dieline in a picture with a transparent background. Numbers come back in picture pixels. */
+function readCarton(upload: Upload): PixelLayout | null {
+  const scale = Math.min(1, 1600 / Math.max(upload.width, upload.height));
+  const w = Math.max(1, Math.round(upload.width * scale));
+  const h = Math.max(1, Math.round(upload.height * scale));
+  const surface = document.createElement("canvas");
+  surface.width = w;
+  surface.height = h;
+  const ctx = surface.getContext("2d", { willReadFrequently: true })!;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(upload.source, 0, 0, w, h);
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, w, h).data;
+  } catch {
+    return null;
+  }
+  const alpha = new Uint8Array(w * h);
+  let solid = 0;
+  for (let i = 0; i < alpha.length; i++) {
+    alpha[i] = data[i * 4 + 3]!;
+    if (alpha[i]! > 127) solid++;
+  }
+  // Without a transparent background there is no outline to read.
+  if (solid > alpha.length * 0.97) return null;
+  const found = findCarton(alpha, w, h);
+  if (!found) return null;
+  const back = 1 / scale;
+  return {
+    ...found,
+    breaks: found.breaks.map((value) => value * back) as PixelLayout["breaks"],
+    glueLeft: found.glueLeft * back,
+    rowTop: found.rowTop * back,
+    rowBottom: found.rowBottom * back,
+    top: found.top * back,
+  };
+}
+
+/** Places the picture so each panel line sits on its panel. */
+function customArt(upload: Upload, layout: PixelLayout, length: number): Art {
+  const front = (layout.lidPanel + 2) % 4;
+  const mmPerPixel = length / (layout.breaks[front + 1]! - layout.breaks[front]!);
+  return {
+    source: upload.source,
+    width: upload.width,
+    height: upload.height,
+    ox: -layout.breaks[0] * mmPerPixel,
+    oy: -layout.rowTop * mmPerPixel,
+    mmW: upload.width * mmPerPixel,
+    mmH: upload.height * mmPerPixel,
+  };
+}
+
+/* ---------- Panel lines ---------- */
+
+const GUIDE_FIELDS: { label: string; axis: "x" | "y"; get(l: PixelLayout): number; set(l: PixelLayout, v: number): void }[] = [
+  { label: "Glue edge", axis: "x", get: (l) => l.glueLeft, set: (l, v) => (l.glueLeft = v) },
+  ...[0, 1, 2, 3, 4].map((i) => ({
+    label: i === 0 ? "Panel 1 left" : `Panel ${i} | ${i + 1}`.replace(`Panel 4 | 5`, "Panel 4 right"),
+    axis: "x" as const,
+    get: (l: PixelLayout) => l.breaks[i]!,
+    set: (l: PixelLayout, v: number) => (l.breaks[i] = v),
+  })),
+  { label: "Lid top", axis: "y", get: (l) => l.top, set: (l, v) => (l.top = v) },
+  { label: "Walls top", axis: "y", get: (l) => l.rowTop, set: (l, v) => (l.rowTop = v) },
+  { label: "Walls bottom", axis: "y", get: (l) => l.rowBottom, set: (l, v) => (l.rowBottom = v) },
+];
+
+function buildGuides(): void {
+  const box = el("guides");
+  const host = el("guideControls");
+  if (!custom) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const { upload } = custom;
+  const rows = GUIDE_FIELDS.map((field) => {
+    const row = document.createElement("label");
+    row.className = "guide-row";
+    const name = document.createElement("span");
+    name.textContent = field.label;
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = String(field.axis === "x" ? upload.width : upload.height);
+    slider.step = "1";
+    slider.value = String(Math.round(field.get(custom!.layout)));
+    slider.setAttribute("aria-label", field.label);
+    slider.addEventListener("input", () => {
+      if (!custom) return;
+      field.set(custom.layout, Number(slider.value));
+      applyGuides();
+    });
+    row.append(name, slider);
+    return row;
+  });
+  const lid = document.createElement("label");
+  lid.className = "guide-row";
+  const lidName = document.createElement("span");
+  lidName.textContent = "Lid on panel";
+  const picker = document.createElement("select");
+  for (let i = 0; i < 4; i++) picker.add(new Option(`Panel ${i + 1}`, String(i)));
+  picker.value = String(custom.layout.lidPanel);
+  picker.addEventListener("change", () => {
+    if (!custom) return;
+    custom.layout.lidPanel = Number(picker.value) as PixelLayout["lidPanel"];
+    applyGuides();
+  });
+  lid.append(lidName, picker);
+  host.replaceChildren(lid, ...rows);
+  drawGuides();
+}
+
+function applyGuides(): void {
+  if (!custom) return;
+  const { layout } = custom;
+  layout.guessed = false;
+  const edges = layout.breaks;
+  const ordered = edges.every((value, i) => i === 0 || value > edges[i - 1]!) && layout.rowBottom > layout.rowTop && layout.top < layout.rowTop;
+  const error = el("error");
+  if (!ordered) {
+    error.textContent = "Panel lines must go in order: left to right, and the lid top above the walls.";
+    error.hidden = false;
+    drawGuides();
+    return;
+  }
+  custom.template = customCartonTemplate(layoutFromPixels({ ...layout, glueLeft: Math.min(layout.glueLeft, edges[0]) }));
+  template = custom.template;
+  artCache = null;
+  update();
+  drawGuides();
+}
+
+function drawGuides(): void {
+  if (!custom) return;
+  const view = el<HTMLCanvasElement>("guideView");
+  const { upload, layout } = custom;
+  const width = 560;
+  const scale = width / upload.width;
+  view.width = width;
+  view.height = Math.max(1, Math.round(upload.height * scale));
+  const ctx = view.getContext("2d")!;
+  ctx.fillStyle = "#8aa0b4";
+  ctx.fillRect(0, 0, view.width, view.height);
+  ctx.drawImage(upload.source, 0, 0, view.width, view.height);
+  ctx.lineWidth = 1.5;
+  const line = (x0: number, y0: number, x1: number, y1: number, colour: string): void => {
+    ctx.strokeStyle = colour;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  };
+  for (const x of [...layout.breaks, layout.glueLeft]) line(x * scale, 0, x * scale, view.height, "#00e0ff");
+  for (const y of [layout.top, layout.rowTop, layout.rowBottom]) line(0, y * scale, view.width, y * scale, "#ffe600");
+  const back = layout.lidPanel;
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.font = "600 12px sans-serif";
+  ctx.fillText("lid", ((layout.breaks[back]! + layout.breaks[back + 1]!) / 2) * scale - 8, layout.top * scale + 14);
 }
 
 type Opened = { source: CanvasImageSource; width: number; height: number };
@@ -633,6 +846,13 @@ for (const zone of [el("drop"), stage]) {
     if (file) void loadDesign(file);
   });
 }
+el("detect").addEventListener("click", () => {
+  const upload = studio.upload;
+  if (!upload || readPicture(upload)) return;
+  const status = el("artStatus");
+  status.classList.add("warn");
+  status.textContent = `No panels could be read from ${upload.name}. Save it as a PNG with a transparent background around the dieline.`;
+});
 el("saveMockup").addEventListener("click", () => void saveMockup());
 
 new ResizeObserver(() => {
