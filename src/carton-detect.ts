@@ -97,17 +97,30 @@ export function findCarton(alpha: ArrayLike<number>, w: number, h: number): Pixe
   if (width < 40 || height < 20 || width < height * 0.8) return null;
 
   // A panel edge shows as a sudden jump in the top or bottom of the outline.
-  const jump = height * 0.12;
-  const found: number[] = [];
-  for (let x = x0 + 1; x < x1; x++) {
-    if (Math.abs(top[x]! - top[x - 1]!) > jump || Math.abs(bottom[x]! - bottom[x - 1]!) > jump) found.push(x);
-  }
-  const steps: number[] = [];
-  for (const x of found) {
-    const previous = steps[steps.length - 1];
-    if (previous !== undefined && x - previous < width * 0.015) continue;
-    steps.push(x);
-  }
+  // Dust flaps sit just inside a narrow panel, so one panel edge can show as a small cluster of jumps.
+  const edgesFor = (jump: number): number[] => {
+    const found: number[] = [];
+    for (let x = x0 + 1; x < x1; x++) {
+      if (Math.abs(top[x]! - top[x - 1]!) > jump || Math.abs(bottom[x]! - bottom[x - 1]!) > jump) found.push(x);
+    }
+    const clusters: number[][] = [];
+    for (const x of found) {
+      const last = clusters[clusters.length - 1];
+      if (last && x - last[last.length - 1]! < width * 0.03) last.push(x);
+      else clusters.push([x]);
+    }
+    const lastCluster = clusters[clusters.length - 1];
+    if (lastCluster && x1 - lastCluster[lastCluster.length - 1]! < width * 0.03 && clusters.length > 1) clusters.pop();
+    // The edge is the end of the cluster that faces the wider neighbour, whose outline is clean.
+    const centres = [x0, ...clusters.map((c) => (c[0]! + c[c.length - 1]!) / 2), x1];
+    return clusters.map((c, i) => {
+      const leftWider = centres[i + 1]! - centres[i]! >= centres[i + 2]! - centres[i + 1]!;
+      return leftWider ? c[0]! : c[c.length - 1]!;
+    });
+  };
+  // Big jumps first, which ignore the small corners of flaps. Smaller jumps only if those find no panels.
+  let steps = edgesFor(height * 0.12);
+  if (steps.length !== 3 && steps.length !== 4) steps = edgesFor(height * 0.03);
 
   const columns = (from: number, to: number): number[] => {
     const xs: number[] = [];
@@ -122,6 +135,9 @@ export function findCarton(alpha: ArrayLike<number>, w: number, h: number): Pixe
     breaks = [steps[0]!, steps[1]!, steps[2]!, steps[3]!, x1];
   } else if (steps.length === 3) {
     breaks = [x0, steps[0]!, steps[1]!, steps[2]!, x1];
+    // A slanted glue flap has no sharp edge. It shows as a first panel wider than the one opposite.
+    const opposite = breaks[3]! - breaks[2]!;
+    if (breaks[1]! - breaks[0]! > opposite * 1.03) breaks[0] = breaks[1]! - opposite;
   } else {
     guessed = true;
     const quarter = width / 4;

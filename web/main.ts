@@ -630,7 +630,21 @@ function buildGuides(): void {
     applyGuides();
   });
   lid.append(lidName, picker);
-  host.replaceChildren(lid, ...rows);
+  const front = document.createElement("label");
+  front.className = "guide-row";
+  const frontName = document.createElement("span");
+  frontName.textContent = "Front of pack";
+  const frontPicker = document.createElement("select");
+  frontPicker.add(new Option("Opposite the lid", "back"));
+  frontPicker.add(new Option("The lid side", "front"));
+  frontPicker.value = custom.layout.lidOnFront ? "front" : "back";
+  frontPicker.addEventListener("change", () => {
+    if (!custom) return;
+    custom.layout.lidOnFront = frontPicker.value === "front";
+    applyGuides();
+  });
+  front.append(frontName, frontPicker);
+  host.replaceChildren(lid, front, ...rows);
   drawGuides();
 }
 

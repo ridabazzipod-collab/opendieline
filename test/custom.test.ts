@@ -112,3 +112,43 @@ describe("findCarton", () => {
     expect(found.breaks).toHaveLength(5);
   });
 });
+
+describe("findCarton with a slanted glue flap and the lid on panel 3", () => {
+  it("finds the glue flap and the lid", () => {
+    const w = 1000;
+    const h = 900;
+    const alpha = new Uint8Array(w * h);
+    const box = (x0: number, y0: number, x1: number, y1: number): void => {
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) alpha[y * w + x] = 255;
+    };
+    box(155, 220, 960, 765); // walls
+    for (let x = 108; x < 155; x++) box(x, Math.round(232 + (155 - x) / 4), x + 1, Math.round(750 - (155 - x) / 4)); // slanted glue
+    box(487, 148, 557, 220); // flap on panel 2
+    box(890, 148, 960, 220); // flap on panel 4
+    box(557, 98, 890, 220); // lid on panel 3
+    box(155, 765, 487, 790); // bottom flaps, with a notch between each
+    box(494, 765, 550, 840);
+    box(564, 765, 883, 880);
+    box(897, 765, 960, 840);
+    const found = findCarton(alpha, w, h)!;
+    expect(found.guessed).toBe(false);
+    expect(found.lidPanel).toBe(2);
+    [155, 487, 557, 890, 960].forEach((expected, i) => expect(Math.abs(found.breaks[i]! - expected)).toBeLessThan(15));
+    expect(found.glueLeft).toBeLessThan(found.breaks[0] - 20);
+    expect(Math.abs(found.rowTop - 220)).toBeLessThan(6);
+  });
+});
+
+describe("front of pack", () => {
+  it("can be the lid side", () => {
+    const { dieline, verification } = generate(customCartonTemplate(layoutFromPixels({ ...layout, lidOnFront: true })), {
+      length: 90,
+      width: 60,
+      depth: 80,
+      thickness: 0,
+    });
+    const lid = dieline.panels.find((panel) => panel.id === "top-lid")!;
+    expect(lid.parent).toBe("front");
+    expect(verification.checks.filter((check) => !check.passed)).toEqual([]);
+  });
+});

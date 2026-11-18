@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Pictures whose dust flaps sit inside narrow side panels, and glue flaps with slanted
+  edges, are now read correctly.
+- Added a "Front of pack" choice for pictures where the lid is on the front panel.
+
 ## 0.3.0
 
 - The mockup studio now reads finished dieline pictures that do not match a built-in

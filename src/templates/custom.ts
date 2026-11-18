@@ -19,6 +19,8 @@ export interface CartonLayout {
   lidPanel: 0 | 1 | 2 | 3;
   /** Total height above the wall row, the lid and its tuck tab together. */
   lidTop: number;
+  /** The lid is on the front of the pack, not the back. Only the names of the panels change. */
+  lidOnFront?: boolean;
 }
 
 /** Where a carton sits in a picture, in picture pixels. */
@@ -33,6 +35,7 @@ export interface PixelLayout {
   /** Top of the whole dieline. */
   top: number;
   lidPanel: 0 | 1 | 2 | 3;
+  lidOnFront?: boolean;
   /** True when the picture did not show clear panel edges and these are only a first guess. */
   guessed: boolean;
 }
@@ -45,6 +48,7 @@ export function layoutFromPixels(p: PixelLayout): CartonLayout {
     height: p.rowBottom - p.rowTop,
     lidPanel: p.lidPanel,
     lidTop: p.rowTop - p.top,
+    ...(p.lidOnFront ? { lidOnFront: true } : {}),
   };
 }
 
@@ -98,17 +102,20 @@ export function buildCustomCarton(measured: CartonLayout, exact: boolean): Dieli
   const dustTaper = Math.min(dustHeight * 0.3, sideWidth * 0.2);
   const glue = Math.min(layout.glue || sideWidth * 0.4, sideWidth * 0.6);
 
+  const lidName = layout.lidOnFront ? "front" : "back";
+  const oppositeName = layout.lidOnFront ? "back" : "front";
   const name = (index: number): string =>
-    index === back ? "back" : index === front ? "front" : `side-${index === sides[0] ? 1 : 2}`;
-  const label = (index: number): string => (index === back ? "Back" : index === front ? "Front" : "Side");
+    index === back ? lidName : index === front ? oppositeName : `side-${index === sides[0] ? 1 : 2}`;
+  const label = (index: number): string => (index === back ? "Lid side" : index === front ? "Opposite" : "Side");
 
-  // The panel that carries the lid is the root; the others hang off it along the strip.
+  // The back of the pack is the root, so the front is the panel that faces the camera.
+  const root = layout.lidOnFront ? front : back;
   const parentOf = new Map<number, number>();
-  for (let i = back - 1; i >= 0; i--) parentOf.set(i, i + 1);
-  for (let i = back + 1; i < 4; i++) parentOf.set(i, i - 1);
+  for (let i = root - 1; i >= 0; i--) parentOf.set(i, i + 1);
+  for (let i = root + 1; i < 4; i++) parentOf.set(i, i - 1);
 
   const panels: PanelSpec[] = [];
-  const order = [back, ...[0, 1, 2, 3].filter((i) => i !== back).sort((p, q) => Math.abs(p - back) - Math.abs(q - back))];
+  const order = [root, ...[0, 1, 2, 3].filter((i) => i !== root).sort((p, q) => Math.abs(p - root) - Math.abs(q - root))];
   for (const i of order) {
     const parent = parentOf.get(i);
     panels.push({
@@ -131,7 +138,7 @@ export function buildCustomCarton(measured: CartonLayout, exact: boolean): Dieli
   }
 
   panels.push(
-    { id: "top-lid", label: "Top", role: "wall", parent: "back", polygon: rect(edges[back]!, -lidDepth, edges[back + 1]!, 0) },
+    { id: "top-lid", label: "Top", role: "wall", parent: lidName, polygon: rect(edges[back]!, -lidDepth, edges[back + 1]!, 0) },
     {
       id: "top-tab",
       label: "Tuck",
@@ -139,7 +146,7 @@ export function buildCustomCarton(measured: CartonLayout, exact: boolean): Dieli
       parent: "top-lid",
       polygon: tuckTab(edges[back]!, edges[back + 1]!, -lidDepth, -1, tabHeight, 1, tabRadius),
     },
-    { id: "bottom-lid", label: "Bottom", role: "wall", parent: "front", polygon: rect(edges[front]!, d, edges[front + 1]!, d + lidDepth) },
+    { id: "bottom-lid", label: "Bottom", role: "wall", parent: oppositeName, polygon: rect(edges[front]!, d, edges[front + 1]!, d + lidDepth) },
     {
       id: "bottom-tab",
       label: "Tuck",
@@ -189,6 +196,7 @@ export function customCartonTemplate(layout: CartonLayout): Template {
         height: layout.height * scale,
         lidPanel: layout.lidPanel,
         lidTop: layout.lidTop * scale,
+        ...(layout.lidOnFront ? { lidOnFront: true } : {}),
       },
     };
   };
@@ -215,6 +223,7 @@ export function customCartonTemplate(layout: CartonLayout): Template {
           height: layout.height * scale,
           lidPanel: layout.lidPanel,
           lidTop: layout.lidTop * scale,
+          ...(layout.lidOnFront ? { lidOnFront: true } : {}),
         },
         false,
       );
